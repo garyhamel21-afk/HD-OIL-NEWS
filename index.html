@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OIL PULSE — 유류산업 뉴스 클리핑</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Noto+Sans+KR:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+  <!-- 헤더 -->
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="header-left">
+        <div class="logo-block">
+          <span class="logo-icon">⬡</span>
+          <div>
+            <p class="logo-eyebrow">HD HYUNDAI OILBANK</p>
+            <h1 class="logo-text">OIL PULSE</h1>
+            <p class="logo-sub">유류산업 뉴스 클리핑 · NEWS CLIPPING</p>
+          </div>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="update-schedule">
+          <span class="schedule-label">CLIPPING HISTORY</span>
+          <div class="schedule-times">
+            <span class="time-chip" id="chip-07" title="07:00 클리핑 보기">07:00</span>
+            <span class="time-chip" id="chip-11" title="11:00 클리핑 보기">11:00</span>
+            <span class="time-chip" id="chip-15" title="15:00 클리핑 보기">15:00</span>
+            <span class="time-chip" id="chip-19" title="19:00 클리핑 보기">19:00</span>
+          </div>
+          <span class="clip-mode-label" id="clip-mode-label"></span>
+        </div>
+        <div class="last-updated-block">
+          <span class="mono" id="last-updated-label">LAST UPDATE</span>
+          <span class="mono accent" id="last-updated-time">—</span>
+        </div>
+        <button class="refresh-btn" id="refresh-btn" onclick="fetchNews()">
+          <span class="refresh-icon" id="refresh-icon">↺</span>
+          <span>새로고침</span>
+        </button>
+      </div>
+    </div>
+    <div class="header-ticker">
+      <span class="ticker-label">LIVE</span>
+      <div class="ticker-track" id="ticker-track">
+        <span>국제유가 · WTI · 브렌트유 · 두바이유 · OPEC · 정제마진 · 주유소가격 · 알뜰주유소 · 유류세 · 에너지전환 · 전기차 · 수소충전소 · 정유사실적 · HD현대오일뱅크 · SK에너지 · GS칼텍스 · 에쓰오일</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-content">
+
+    <!-- AI 브리핑 섹션 -->
+    <section class="briefing-section" id="briefing-section">
+      <div class="briefing-header">
+        <div class="briefing-badge">
+          <span class="badge-dot"></span>
+          <div class="briefing-badge-label">
+            <span class="briefing-badge-en">AI BRIEFING</span>
+            <span class="briefing-badge-kr">오늘의 AI 브리핑</span>
+          </div>
+        </div>
+        <span class="briefing-date mono" id="briefing-date">—</span>
+      </div>
+      <div class="briefing-body" id="briefing-body">
+        <div class="empty-state">
+          <div class="empty-icon">◈</div>
+          <p>뉴스를 불러오면 AI가 자동으로 오늘의 유류산업 동향을 브리핑합니다.</p>
+          <button class="cta-btn" onclick="fetchNews()">지금 불러오기</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 뉴스 리스트 섹션 -->
+    <section class="news-section">
+      <div class="news-header">
+        <div class="news-title-block">
+          <p class="section-eyebrow">TOP NEWS</p>
+          <h2 class="news-section-title">TOP 30 뉴스</h2>
+          <span class="news-count mono" id="news-count">0 건</span>
+        </div>
+        <div class="filter-bar">
+          <button class="filter-btn active" data-filter="all">전체</button>
+          <button class="filter-btn" data-filter="price">유가/가격</button>
+          <button class="filter-btn" data-filter="company">정유사</button>
+          <button class="filter-btn" data-filter="station">주유소</button>
+          <button class="filter-btn" data-filter="policy">정책/규제</button>
+          <button class="filter-btn" data-filter="mobility">모빌리티</button>
+        </div>
+      </div>
+
+      <div class="news-list" id="news-list">
+        <div class="skeleton-list">
+          <div class="skeleton-item" style="--i:1"></div>
+          <div class="skeleton-item" style="--i:2"></div>
+          <div class="skeleton-item" style="--i:3"></div>
+          <div class="skeleton-item" style="--i:4"></div>
+          <div class="skeleton-item" style="--i:5"></div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <span class="mono">© 2025 HD현대오일뱅크 국내사업본부</span>
+      <span class="mono accent">POWERED BY AI NEWS CLIPPING</span>
+    </div>
+  </footer>
+
+  <!-- 로딩 오버레이 -->
+  <div class="loading-overlay" id="loading-overlay">
+    <div class="loading-box">
+      <div class="loading-spinner"></div>
+      <p class="loading-text" id="loading-text">뉴스를 수집하는 중...</p>
+      <p class="loading-sub" id="loading-sub">잠시만 기다려주세요</p>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

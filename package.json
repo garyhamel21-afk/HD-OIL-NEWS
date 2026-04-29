@@ -1,0 +1,16 @@
+{
+  "name": "oil-pulse",
+  "version": "1.0.0",
+  "description": "HD현대오일뱅크 유류산업 뉴스 클리핑",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

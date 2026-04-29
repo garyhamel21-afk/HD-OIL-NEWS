@@ -1,0 +1,28 @@
+# 의존성
+node_modules/
+
+# 환경변수 / 시크릿 (API 키 등이 담길 경우)
+.env
+.env.local
+.env.*.local
+
+# 로그
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 에디터
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# 빌드 산출물
+dist/
+build/
