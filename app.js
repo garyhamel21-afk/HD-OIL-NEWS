@@ -47,19 +47,41 @@ let currentFilter = 'all';
 let viewingClipSlot = null;   // 현재 조회 중인 타임슬롯 (null = 최신 라이브)
 
 // ── 초기화 ─────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   highlightCurrentUpdateTime();
   updateLastUpdatedDisplay();
   setupFilterButtons();
   setupTimeChips();
   setupAutoRefresh();
 
+  // 1순위: 로컬 캐시 (즉시)
   const cached = loadCache();
   if (cached) {
     renderAll(cached.news, cached.briefing, cached.fetchedAt);
-  } else {
-    fetchNews();
+    return;
   }
+
+  // 2순위: Supabase 최신 클립 (DB 빠른 조회)
+  if (CONFIG.supabase.anonKey !== 'YOUR_SUPABASE_ANON_KEY') {
+    try {
+      showLoading('저장된 클리핑 확인 중...', 'Supabase에서 최신 뉴스를 조회합니다');
+      const latest = await loadLatestClipFromSupabase();
+      hideLoading();
+      if (latest) {
+        const fetchedAt = new Date(latest.fetched_at).getTime();
+        saveCache(latest.news, latest.briefing);
+        renderAll(latest.news, latest.briefing, fetchedAt);
+        showToast('저장된 클리핑을 불러왔습니다');
+        return;
+      }
+    } catch (e) {
+      hideLoading();
+      console.warn('Supabase 초기 로드 실패:', e.message);
+    }
+  }
+
+  // 3순위: 실시간 수집
+  fetchNews();
 });
 
 // ── 업데이트 시간 강조 ──────────────────────────────────
@@ -310,6 +332,21 @@ async function saveClipToSupabase(news, briefing, timeSlot) {
 }
 
 // ── Supabase: 클립 조회 (해당 슬롯 최신 1건) ─────────
+// 가장 최근 클립 조회 (4시간 이내, 시간슬롯 무관)
+async function loadLatestClipFromSupabase() {
+  const params = new URLSearchParams({ order: 'fetched_at.desc', limit: '1' });
+  const res = await fetch(
+    `${CONFIG.supabase.url}/rest/v1/${CONFIG.supabase.table}?${params}`,
+    { headers: { 'apikey': CONFIG.supabase.anonKey, 'Authorization': `Bearer ${CONFIG.supabase.anonKey}` } }
+  );
+  if (!res.ok) return null;
+  const data = await res.json();
+  if (!data.length) return null;
+  const clip = data[0];
+  const age = Date.now() - new Date(clip.fetched_at).getTime();
+  return age < 4 * 60 * 60 * 1000 ? clip : null;
+}
+
 async function loadClipFromSupabase(timeSlot) {
   if (CONFIG.supabase.anonKey === 'YOUR_SUPABASE_ANON_KEY') {
     throw new Error('Supabase anonKey가 설정되지 않았습니다. CONFIG.supabase.anonKey를 설정해주세요.');
@@ -382,7 +419,7 @@ async function fetchAllNaverNews() {
   });
 
   results.sort((a, b) => (b.date > a.date ? 1 : -1));
-  return results.slice(0, 40);
+  return results.slice(0, 25);
 }
 
 // ── Claude: 수집된 기사 기반 브리핑 생성 ─────────────
@@ -390,9 +427,9 @@ async function callClaudeWithArticles(articles) {
   const today   = new Date();
   const dateStr = today.toLocaleDateString('ko-KR', { year:'numeric', month:'long', day:'numeric', weekday:'long' });
 
-  // 설명을 80자로 잘라 토큰 절약
+  // 설명을 50자로 잘라 토큰 절약
   const articleText = articles.map((a, i) =>
-    `[${i + 1}] ${a.title}\n출처:${a.source} 날짜:${a.date}\nURL:${a.url}\n내용:${a.description.slice(0, 80)}`
+    `[${i + 1}] ${a.title}\n${a.source}|${a.date}|${a.url}\n${a.description.slice(0, 50)}`
   ).join('\n---\n');
 
   const systemPrompt =
@@ -408,7 +445,7 @@ async function callClaudeWithArticles(articles) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model:      CONFIG.model,
-      max_tokens: 8192,
+      max_tokens: 3500,
       system:     systemPrompt,
       messages:   [{ role: 'user', content: userPrompt }],
     }),
