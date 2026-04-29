@@ -1,8 +1,10 @@
 // Vercel Serverless Function — Naver News API 프록시
 module.exports = async function handler(req, res) {
-  // CORS 허용
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  // Vercel CDN이 20분간 응답을 캐싱 → 동일 키워드 재요청 시 즉시 반환
+  res.setHeader('Cache-Control', 's-maxage=1200, stale-while-revalidate=600');
+
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 

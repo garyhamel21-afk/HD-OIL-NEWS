@@ -28,9 +28,20 @@ const KEYS = {
 // ── 정적 파일 서빙 (index.html, style.css, app.js) ───────
 app.use(express.static(path.join(__dirname)));
 
+// ── 로컬 인메모리 캐시 (20분) ────────────────────────────
+const naverCache = new Map();
+const CACHE_TTL  = 20 * 60 * 1000;
+
 // ── Naver 뉴스 API 프록시 ────────────────────────────────
-// GET /api/naver/news?query=국제유가&display=5&sort=date
 app.get('/api/naver/news', async (req, res) => {
+  const cacheKey = JSON.stringify(req.query);
+  const cached   = naverCache.get(cacheKey);
+
+  // 캐시 히트: 즉시 반환
+  if (cached && Date.now() - cached.ts < CACHE_TTL) {
+    return res.json(cached.data);
+  }
+
   try {
     const params = new URLSearchParams(req.query);
     const url = `${KEYS.naver.baseUrl}/v1/search/news.json?${params}`;
@@ -43,9 +54,9 @@ app.get('/api/naver/news', async (req, res) => {
     });
 
     const data = await response.json();
-    if (!response.ok) {
-      return res.status(response.status).json({ error: data });
-    }
+    if (!response.ok) return res.status(response.status).json({ error: data });
+
+    naverCache.set(cacheKey, { data, ts: Date.now() });
     res.json(data);
   } catch (err) {
     console.error('[Naver API Error]', err.message);

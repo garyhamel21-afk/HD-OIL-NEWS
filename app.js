@@ -348,35 +348,41 @@ async function fetchNaverNews(query) {
   return res.json();
 }
 
-// ── 모든 키워드 뉴스 수집 + 중복 제거 ────────────────
+// ── 모든 키워드 뉴스 병렬 수집 + 중복 제거 ──────────
 async function fetchAllNaverNews() {
+  // 모든 키워드를 동시에 호출 (순차 → 병렬, 5~7배 빠름)
+  const responses = await Promise.allSettled(
+    NAVER_KEYWORDS.map(kw => fetchNaverNews(kw))
+  );
+
   const seen    = new Set();
   const results = [];
 
-  for (const keyword of NAVER_KEYWORDS) {
-    try {
-      const data = await fetchNaverNews(keyword);
-      if (!data.items) continue;
-      for (const item of data.items) {
-        const url = item.originallink || item.link;
-        if (seen.has(url)) continue;
-        seen.add(url);
-        results.push({
-          title:       stripHtml(item.title),
-          url,
-          source:      extractSource(item.link),
-          date:        formatNaverDate(item.pubDate),
-          description: stripHtml(item.description),
-          tag:         classifyTag(stripHtml(item.title) + ' ' + stripHtml(item.description)),
-        });
-      }
-    } catch (e) {
-      console.warn(`네이버 검색 실패 [${keyword}]:`, e.message);
+  responses.forEach((res, i) => {
+    if (res.status === 'rejected') {
+      console.warn(`네이버 검색 실패 [${NAVER_KEYWORDS[i]}]:`, res.reason?.message);
+      return;
     }
-  }
+    const items = res.value?.items;
+    if (!items) return;
+
+    for (const item of items) {
+      const url = item.originallink || item.link;
+      if (seen.has(url)) continue;
+      seen.add(url);
+      results.push({
+        title:       stripHtml(item.title),
+        url,
+        source:      extractSource(item.link),
+        date:        formatNaverDate(item.pubDate),
+        description: stripHtml(item.description),
+        tag:         classifyTag(stripHtml(item.title) + ' ' + stripHtml(item.description)),
+      });
+    }
+  });
 
   results.sort((a, b) => (b.date > a.date ? 1 : -1));
-  return results.slice(0, 40);   // Claude 토큰 절약을 위해 40건으로 제한
+  return results.slice(0, 40);
 }
 
 // ── Claude: 수집된 기사 기반 브리핑 생성 ─────────────
