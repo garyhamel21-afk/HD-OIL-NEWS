@@ -4,6 +4,7 @@
    실행: node server.js
    ============================ */
 
+require('dotenv').config();
 const express = require('express');
 const path    = require('path');
 
@@ -13,13 +14,13 @@ app.use(express.json({ limit: '2mb' }));
 // ── API 키 설정 ──────────────────────────────────────────
 const KEYS = {
   claude: {
-    apiKey:  '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',
+    apiKey:  process.env.CLAUDE_API_KEY || '',
     model:   'claude-sonnet-4-6',
     baseUrl: 'https://api.anthropic.com',
   },
   naver: {
-    clientId:     'LDuaU_BsVKq7vhG7uYRQ',
-    clientSecret: 'y4naSnDw5r',
+    clientId:     process.env.NAVER_CLIENT_ID     || 'LDuaU_BsVKq7vhG7uYRQ',
+    clientSecret: process.env.NAVER_CLIENT_SECRET || 'y4naSnDw5r',
     baseUrl:      'https://openapi.naver.com',
   },
 };

@@ -7,8 +7,10 @@ module.exports = async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY
-    || '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';
+  const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY;
+  if (!CLAUDE_API_KEY) {
+    return res.status(500).json({ error: { message: 'CLAUDE_API_KEY 환경변수가 설정되지 않았습니다.' } });
+  }
 
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
