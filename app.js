@@ -398,7 +398,7 @@ async function callClaudeWithArticles(articles) {
   const systemPrompt =
 `HD현대오일뱅크 유류산업 뉴스 클리핑 AI. 순수 JSON만 반환 (코드블록 금지).
 형식:
-{"news":[{"id":1,"title":"제목","url":"URL","source":"언론사","date":"YYYY-MM-DD","tag":"price|company|station|policy|mobility|general","summary":"요약(30자)"}],"briefing":"종합브리핑(200-400자,HTML허용:<strong><br>)"}
+{"news":[{"id":1,"title":"제목","url":"URL","source":"언론사","date":"YYYY-MM-DD HH:mm","tag":"price|company|station|policy|mobility|general","summary":"요약(30자)"}],"briefing":"종합브리핑(200-400자,HTML허용:<strong><br>)"}
 태그: price=유가/환율, company=정유사, station=주유소, policy=유류세/정책, mobility=전기차/수소. 중복제거, 최대30개.`;
 
   const userPrompt = `${dateStr} 유류산업 뉴스:\n\n${articleText}\n\n최대30개 선별 후 JSON만 응답.`;
@@ -614,6 +614,10 @@ function extractSource(url) {
 }
 
 function formatNaverDate(pubDate) {
-  try { return new Date(pubDate).toISOString().split('T')[0]; }
+  try {
+    const d = new Date(pubDate);
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
   catch { return ''; }
 }
