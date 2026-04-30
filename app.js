@@ -248,7 +248,12 @@ async function fetchNews() {
     showLoading('네이버 뉴스 검색 중...', '유류산업 키워드로 최신 기사를 수집합니다');
     const articles = await fetchAllNaverNews();
 
-    showLoading('AI 브리핑 생성 중...', `${articles.length}건 기사를 분석합니다`);
+    // ① 네이버 수집 즉시 화면 표시 (Claude 대기 없음)
+    hideLoading();
+    renderRawArticles(articles);
+    showBriefingLoading();
+
+    // ② Claude는 백그라운드에서 브리핑·큐레이션 생성
     const { news, briefing } = await callClaudeWithArticles(articles);
 
     const cacheData = saveCache(news, briefing);
@@ -484,6 +489,24 @@ function classifyTag(text) {
     if (rule.keywords.some(kw => text.includes(kw))) return rule.tag;
   }
   return 'general';
+}
+
+// ── 네이버 수집 직후 즉시 렌더 (Claude 대기 없이) ───────
+function renderRawArticles(articles) {
+  allNews = articles.slice(0, CONFIG.maxNews);
+  applyFilter();
+  updateLastUpdatedDisplay(formatTime(new Date()));
+  highlightCurrentUpdateTime();
+}
+
+function showBriefingLoading() {
+  const body   = document.getElementById('briefing-body');
+  const dateEl = document.getElementById('briefing-date');
+  const d = new Date();
+  dateEl.textContent =
+    d.toLocaleDateString('ko-KR', { year:'numeric', month:'long', day:'numeric', weekday:'long' }) +
+    ' ' + d.toLocaleTimeString('ko-KR', { hour:'2-digit', minute:'2-digit' });
+  body.innerHTML = '<p style="color:var(--text3);font-size:13px;padding:8px 0;">AI 브리핑 생성 중...</p>';
 }
 
 // ── 렌더링 ─────────────────────────────────────────────
