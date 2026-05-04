@@ -44,6 +44,20 @@ module.exports = async function handler(req, res) {
       })
     );
 
+    // YouTube API 에러 감지 (첫 번째 결과 기준)
+    for (const result of searchResults) {
+      if (result.status !== 'fulfilled') continue;
+      const ytErr = result.value?.error;
+      if (ytErr) {
+        const msg = ytErr.message || 'YouTube API 오류';
+        console.error('[YouTube API Error]', ytErr.code, msg);
+        return res.status(400).json({
+          error: `YouTube API 오류 (${ytErr.code}): ${msg}`,
+        });
+      }
+      break; // 첫 번째 성공 응답 확인 후 중단
+    }
+
     // 중복 없이 videoId + snippet 수집
     const videoMap = new Map();
     for (const result of searchResults) {

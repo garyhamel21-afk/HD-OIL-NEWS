@@ -382,7 +382,13 @@ async function fetchYouTubeVideos() {
     const data = await res.json();
 
     if (!res.ok || data.error) {
-      renderYouTubeError(data.error || '영상 로드 실패');
+      // API 키 미설정 안내
+      const isKeyMissing = (data.error || '').includes('YOUTUBE_API_KEY');
+      renderYouTubeError(
+        isKeyMissing
+          ? 'YouTube API 키가 설정되지 않았습니다. Vercel 환경변수에 YOUTUBE_API_KEY를 추가해주세요.'
+          : (data.error || '영상 로드 실패')
+      );
       return;
     }
 
