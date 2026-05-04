@@ -94,7 +94,7 @@ function setupTimeChips() {
   });
 }
 
-// ── 시간 칩 클릭: Supabase에서 해당 슬롯 데이터 로드 ──
+// ── 시간 칩 클릭: Supabase에서 해당 슬롯 데이터 로드 (없으면 자동 클리핑) ──
 async function handleTimeChipClick(slot) {
   // 이미 선택된 슬롯 재클릭 시 라이브 뷰로 복귀
   if (viewingClipSlot === slot) {
@@ -102,7 +102,10 @@ async function handleTimeChipClick(slot) {
     return;
   }
 
-  const chipMap = { 7: 'chip-07', 11: 'chip-11', 15: 'chip-15', 19: 'chip-19' };
+  const chipMap  = { 7: 'chip-07', 11: 'chip-11', 15: 'chip-15', 19: 'chip-19' };
+  const prevHour = { 7: 0, 11: 7, 15: 11, 19: 15 };
+  const from = String(prevHour[slot] ?? 0).padStart(2, '0');
+  const to   = String(slot).padStart(2, '0');
 
   // 선택 상태 업데이트
   Object.values(chipMap).forEach(id => {
@@ -113,35 +116,53 @@ async function handleTimeChipClick(slot) {
   if (chip) chip.classList.add('selected', 'loading');
 
   showLoading(
-    `${String(slot).padStart(2, '0')}:00 클리핑 불러오는 중...`,
+    `${to}:00 클리핑 확인 중...`,
     'Supabase에서 저장된 뉴스를 조회합니다'
   );
 
   try {
     const clip = await loadClipFromSupabase(slot);
 
-    if (!clip) {
-      const prevHour = { 7: 0, 11: 7, 15: 11, 19: 15 };
-      const from = String(prevHour[slot] ?? 0).padStart(2, '0');
-      const to   = String(slot).padStart(2, '0');
-      showToast(`오늘 ${from}:00 ~ ${to}:00 클리핑 데이터가 없습니다`);
-      if (chip) chip.classList.remove('selected', 'loading');
-      highlightCurrentUpdateTime();
-      viewingClipSlot = null;
-      return;
+    if (clip) {
+      // ── 저장된 클립 있음 → 바로 표시 ──
+      viewingClipSlot = slot;
+      if (chip) chip.classList.remove('loading');
+      renderAll(clip.news, clip.briefing, new Date(clip.fetched_at).getTime());
+      setClipModeLabel(slot, clip.fetched_at);
+      showToast(`${from}:00 ~ ${to}:00 클리핑 표시 중`);
+
+    } else {
+      // ── 저장된 클립 없음 → 지금 바로 수집·저장 ──
+      showLoading(
+        `${from}:00 ~ ${to}:00 뉴스 클리핑 중...`,
+        '네이버에서 기사를 수집하고 AI가 정리합니다'
+      );
+
+      // ① 뉴스 수집
+      const articles = await fetchAllNaverNews();
+
+      // ② 브리핑(Haiku) + 큐레이션(Sonnet) 병렬 실행
+      const [briefing, news] = await Promise.all([
+        generateBriefing(articles).catch(() => ''),
+        curateNewsWithClaude(articles).catch(() => articles.slice(0, CONFIG.maxNews)),
+      ]);
+
+      const fetchedAt = new Date().toISOString();
+
+      // ③ Supabase에 해당 슬롯으로 저장 (비동기, 화면 차단 없음)
+      saveClipToSupabase(news, briefing, slot);
+
+      viewingClipSlot = slot;
+      if (chip) chip.classList.remove('loading');
+
+      renderAll(news, briefing, new Date(fetchedAt).getTime());
+      setClipModeLabel(slot, fetchedAt);
+      showToast(`${from}:00 ~ ${to}:00 뉴스 클리핑 완료`);
     }
 
-    viewingClipSlot = slot;
-    if (chip) chip.classList.remove('loading');
-
-    renderAll(clip.news, clip.briefing, new Date(clip.fetched_at).getTime());
-    setClipModeLabel(slot, clip.fetched_at);
-    showToast(`${String(slot).padStart(2, '0')}:00 클리핑 표시 중`);
-
   } catch (err) {
-    console.error('클립 조회 오류:', err);
-    const msg = err.message?.includes('fetch') ? '서버 연결 오류 (서버 재시작 필요)' : (err.message || '데이터 로드 중 오류 발생');
-    showToast(msg, 5000);
+    console.error('클립 처리 오류:', err);
+    showToast(err.message || '데이터 로드 중 오류가 발생했습니다', 5000);
     if (chip) chip.classList.remove('selected', 'loading');
     highlightCurrentUpdateTime();
     viewingClipSlot = null;
