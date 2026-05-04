@@ -59,9 +59,6 @@ document.addEventListener('DOMContentLoaded', () => {
   } else {
     fetchNews();
   }
-
-  // YouTube는 독립적으로 항상 로드
-  fetchYouTubeVideos();
 });
 
 // ── 업데이트 시간 강조 ──────────────────────────────────
@@ -373,82 +370,6 @@ async function loadClipFromSupabase(timeSlot) {
     throw new Error(err.error || `클립 조회 오류: ${res.status}`);
   }
   return res.json();   // null 또는 clip 객체
-}
-
-// ── YouTube 영상 수집 및 렌더링 ────────────────────────
-async function fetchYouTubeVideos() {
-  try {
-    const res  = await fetch('/api/youtube');
-    const data = await res.json();
-
-    if (!res.ok || data.error) {
-      // API 키 미설정 안내
-      const isKeyMissing = (data.error || '').includes('YOUTUBE_API_KEY');
-      renderYouTubeError(
-        isKeyMissing
-          ? 'YouTube API 키가 설정되지 않았습니다. Vercel 환경변수에 YOUTUBE_API_KEY를 추가해주세요.'
-          : (data.error || '영상 로드 실패')
-      );
-      return;
-    }
-
-    renderYouTubeCards(data);
-  } catch (err) {
-    renderYouTubeError('YouTube 영상을 불러올 수 없습니다.');
-  }
-}
-
-function renderYouTubeCards(videos) {
-  const list = document.getElementById('youtube-list');
-  if (!list) return;
-
-  if (!videos || videos.length === 0) {
-    list.innerHTML = '<div class="yt-error">표시할 영상이 없습니다.</div>';
-    return;
-  }
-
-  list.innerHTML = videos.map(v => `
-    <a class="yt-card" href="${escapeHtml(v.url)}" target="_blank" rel="noopener noreferrer">
-      <div class="yt-thumb-wrap">
-        <img class="yt-thumb" src="${escapeHtml(v.thumbnail)}" alt="${escapeHtml(v.title)}" loading="lazy" />
-        <div class="yt-play-btn">
-          <div class="yt-play-icon">
-            <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-          </div>
-        </div>
-        <span class="yt-view-badge">▶ ${formatViewCount(v.viewCount)}</span>
-      </div>
-      <div class="yt-body">
-        <div class="yt-title">${escapeHtml(v.title)}</div>
-        <div class="yt-meta">
-          <span class="yt-channel">${escapeHtml(v.channel)}</span>
-          <span class="yt-date">${formatRelativeDate(v.publishedAt)}</span>
-        </div>
-      </div>
-    </a>
-  `).join('');
-}
-
-function renderYouTubeError(msg) {
-  const list = document.getElementById('youtube-list');
-  if (list) list.innerHTML = `<div class="yt-error">${escapeHtml(msg)}</div>`;
-}
-
-function formatViewCount(n) {
-  if (!n || n === 0) return '—';
-  if (n >= 10000) return Math.floor(n / 10000) + '만회';
-  if (n >= 1000)  return (n / 1000).toFixed(1) + '천회';
-  return n + '회';
-}
-
-function formatRelativeDate(iso) {
-  if (!iso) return '';
-  const diff = Date.now() - new Date(iso).getTime();
-  const days  = Math.floor(diff / 86400000);
-  if (days === 0) return '오늘';
-  if (days  <  7) return `${days}일 전`;
-  if (days  < 30) return `${Math.floor(days / 7)}주 전`;
-  return `${Math.floor(days / 30)}개월 전`;
 }
 
 // ── 네이버 뉴스 API 호출 (server.js 프록시 경유) ────────

@@ -11,8 +11,6 @@ module.exports = function handler(req, res) {
     supabase_url:       supabaseUrl || '(없음)',
     supabase_key_set:   supabaseKey.length > 0,
     supabase_key_prefix: supabaseKey.length > 0 ? supabaseKey.slice(0, 20) + '...' : '(없음)',
-    youtube_key_set:    !!(process.env.YOUTUBE_API_KEY),
-    youtube_key_prefix: (process.env.YOUTUBE_API_KEY || '').slice(0, 10) || '(없음)',
     node_env:           process.env.NODE_ENV || 'undefined',
   });
 };

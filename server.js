@@ -28,9 +28,6 @@ const KEYS = {
     anonKey: process.env.SUPABASE_ANON_KEY || '',
     table:   'clips',
   },
-  youtube: {
-    apiKey: process.env.YOUTUBE_API_KEY || '',
-  },
 };
 
 // ── 정적 파일 서빙 (index.html, style.css, app.js) ───────
@@ -97,22 +94,6 @@ app.post('/api/claude/messages', async (req, res) => {
   } catch (err) {
     console.error('[Claude API Error]', err.message);
     res.status(500).json({ error: { message: err.message } });
-  }
-});
-
-// ── YouTube 영상 조회 (GET /api/youtube) ──────────────────
-app.get('/api/youtube', async (req, res) => {
-  const apiKey = KEYS.youtube.apiKey;
-  if (!apiKey) {
-    return res.status(500).json({ error: 'YOUTUBE_API_KEY 환경변수가 설정되지 않았습니다.' });
-  }
-  try {
-    // api/youtube.js 로직을 그대로 사용 (로컬 서버도 동일 동작)
-    const ytHandler = require('./api/youtube');
-    return ytHandler(req, res);
-  } catch (err) {
-    console.error('[YouTube Proxy Error]', err.message);
-    res.status(500).json({ error: err.message });
   }
 });
 
