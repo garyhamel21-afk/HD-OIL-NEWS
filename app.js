@@ -10,16 +10,15 @@ const CONFIG = {
   cacheKey: 'oilpulse_cache',
   cacheExpiry: 3.5 * 60 * 60 * 1000,
   model: 'claude-sonnet-4-6',
+  briefingModel: 'claude-haiku-4-5-20251001',
 
   naver: {
-    endpoint: '/api/naver/news',  // server.js 프록시
+    endpoint: '/api/naver/news',
     display:  5,
   },
 
-  supabase: {
-    url:     'https://gsmcbriozeyafhevohfo.supabase.co',
-    anonKey: 'YOUR_SUPABASE_ANON_KEY',   // ← Supabase 대시보드 > Settings > API 에서 확인
-    table:   'clips',
+  clips: {
+    endpoint: '/api/clips',  // server.js 프록시 (Supabase 키는 서버에서 관리)
   },
 };
 
@@ -83,11 +82,14 @@ function highlightCurrentUpdateTime() {
 
 // ── 시간 칩 클릭 핸들러 설정 ────────────────────────────
 function setupTimeChips() {
-  const chipMap = { 7: 'chip-07', 11: 'chip-11', 15: 'chip-15', 19: 'chip-19' };
+  const chipMap  = { 7: 'chip-07', 11: 'chip-11', 15: 'chip-15', 19: 'chip-19' };
+  const prevHour = { 7: 0, 11: 7, 15: 11, 19: 15 };  // 각 슬롯의 시작 시간
   CONFIG.updateHours.forEach(slot => {
     const chip = document.getElementById(chipMap[slot]);
     if (!chip) return;
-    chip.title = `${String(slot).padStart(2, '0')}:00 클리핑 보기`;
+    const from = String(prevHour[slot]).padStart(2, '0');
+    const to   = String(slot).padStart(2, '0');
+    chip.title = `${from}:00 ~ ${to}:00 뉴스 클리핑 보기`;
     chip.addEventListener('click', () => handleTimeChipClick(slot));
   });
 }
@@ -119,8 +121,10 @@ async function handleTimeChipClick(slot) {
     const clip = await loadClipFromSupabase(slot);
 
     if (!clip) {
-      showToast(`${String(slot).padStart(2, '0')}:00 클리핑 데이터가 없습니다`);
-      // 선택 해제 후 현재 시간 복원
+      const prevHour = { 7: 0, 11: 7, 15: 11, 19: 15 };
+      const from = String(prevHour[slot] ?? 0).padStart(2, '0');
+      const to   = String(slot).padStart(2, '0');
+      showToast(`오늘 ${from}:00 ~ ${to}:00 클리핑 데이터가 없습니다`);
       if (chip) chip.classList.remove('selected', 'loading');
       highlightCurrentUpdateTime();
       viewingClipSlot = null;
@@ -135,8 +139,9 @@ async function handleTimeChipClick(slot) {
     showToast(`${String(slot).padStart(2, '0')}:00 클리핑 표시 중`);
 
   } catch (err) {
-    console.error('Supabase 조회 오류:', err);
-    showToast('데이터 로드 중 오류가 발생했습니다');
+    console.error('클립 조회 오류:', err);
+    const msg = err.message?.includes('fetch') ? '서버 연결 오류 (서버 재시작 필요)' : (err.message || '데이터 로드 중 오류 발생');
+    showToast(msg, 5000);
     if (chip) chip.classList.remove('selected', 'loading');
     highlightCurrentUpdateTime();
     viewingClipSlot = null;
@@ -167,10 +172,12 @@ function exitClipMode() {
 function setClipModeLabel(slot, fetchedAt) {
   const label = document.getElementById('clip-mode-label');
   if (!label) return;
-  const d = new Date(fetchedAt);
-  const dateStr = d.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' });
-  const timeStr = d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
-  label.textContent = `${String(slot).padStart(2,'0')}:00 클리핑 보는 중 · ${dateStr} ${timeStr}`;
+  const prevHour = { 7: 0, 11: 7, 15: 11, 19: 15 };
+  const d        = new Date(fetchedAt);
+  const dateStr  = d.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' });
+  const from     = String(prevHour[slot] ?? 0).padStart(2, '0');
+  const to       = String(slot).padStart(2, '0');
+  label.textContent = `${dateStr} ${from}:00 ~ ${to}:00 클리핑 보는 중`;
   label.classList.add('visible');
 }
 
@@ -253,8 +260,25 @@ async function fetchNews() {
     renderRawArticles(articles);
     showBriefingLoading();
 
-    // ② Claude는 백그라운드에서 브리핑·큐레이션 생성
-    const { news, briefing } = await callClaudeWithArticles(articles);
+    // ② 두 개의 Claude 호출을 병렬 실행
+    //    - 브리핑 (Haiku, 빠름) → 도착 즉시 화면 반영
+    //    - 뉴스 큐레이션 (Sonnet, 정확도) → 백그라운드 진행
+    const briefingPromise = generateBriefing(articles);
+    const curationPromise = curateNewsWithClaude(articles);
+
+    // 브리핑이 먼저 완성되면 곧바로 표시
+    briefingPromise
+      .then(briefing => renderBriefing(briefing, Date.now()))
+      .catch(err => {
+        console.warn('브리핑 생성 실패:', err.message);
+        const body = document.getElementById('briefing-body');
+        if (body) body.innerHTML =
+          '<p style="color:var(--text3);font-size:13px;padding:8px 0;">브리핑 생성에 실패했습니다.</p>';
+      });
+
+    // 두 호출 모두 완료되면 캐시·Supabase 저장 및 최종 리렌더
+    const briefing = await briefingPromise.catch(() => '');
+    const news     = await curationPromise.catch(() => articles.slice(0, CONFIG.maxNews));
 
     const cacheData = saveCache(news, briefing);
     renderAll(news, briefing, cacheData.fetchedAt);
@@ -281,64 +305,50 @@ function getCurrentTimeSlot() {
   return slot;
 }
 
-// ── Supabase: 클립 저장 ────────────────────────────────
+// ── KST 기준 오늘 날짜 (YYYY-MM-DD) ──────────────────
+function getTodayKST() {
+  const now = new Date();
+  const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  return kst.toISOString().slice(0, 10);
+}
+
+// ── Supabase: 클립 저장 (서버 프록시 경유) ─────────────
 async function saveClipToSupabase(news, briefing, timeSlot) {
-  if (CONFIG.supabase.anonKey === 'YOUR_SUPABASE_ANON_KEY') {
-    console.warn('Supabase anonKey가 설정되지 않았습니다.');
-    return;
-  }
   try {
-    const res = await fetch(`${CONFIG.supabase.url}/rest/v1/${CONFIG.supabase.table}`, {
+    const res = await fetch(CONFIG.clips.endpoint, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey':        CONFIG.supabase.anonKey,
-        'Authorization': `Bearer ${CONFIG.supabase.anonKey}`,
-        'Prefer':        'return=minimal',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         time_slot:  timeSlot,
+        clip_date:  getTodayKST(),
         news:       news,
         briefing:   briefing,
         fetched_at: new Date().toISOString(),
       }),
     });
     if (!res.ok) {
-      const err = await res.text();
-      console.error('Supabase 저장 오류:', err);
+      const err = await res.json().catch(() => ({}));
+      console.error('클립 저장 오류:', err.error || res.status);
     } else {
-      console.log(`Supabase에 ${timeSlot}:00 클립 저장 완료`);
+      console.log(`${String(timeSlot).padStart(2,'0')}:00 클립 저장 완료 (${getTodayKST()})`);
     }
   } catch (e) {
-    console.error('Supabase 저장 실패:', e);
+    console.error('클립 저장 실패:', e);
   }
 }
 
-// ── Supabase: 클립 조회 (해당 슬롯 최신 1건) ─────────
+// ── Supabase: 당일 해당 슬롯 클립 조회 (서버 프록시 경유) ──
 async function loadClipFromSupabase(timeSlot) {
-  if (CONFIG.supabase.anonKey === 'YOUR_SUPABASE_ANON_KEY') {
-    throw new Error('Supabase anonKey가 설정되지 않았습니다. CONFIG.supabase.anonKey를 설정해주세요.');
-  }
   const params = new URLSearchParams({
-    time_slot: `eq.${timeSlot}`,
-    order:     'fetched_at.desc',
-    limit:     '1',
+    slot: timeSlot,
+    date: getTodayKST(),
   });
-  const res = await fetch(
-    `${CONFIG.supabase.url}/rest/v1/${CONFIG.supabase.table}?${params}`,
-    {
-      headers: {
-        'apikey':        CONFIG.supabase.anonKey,
-        'Authorization': `Bearer ${CONFIG.supabase.anonKey}`,
-      },
-    }
-  );
+  const res = await fetch(`${CONFIG.clips.endpoint}?${params}`);
   if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Supabase 조회 오류: ${err}`);
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `클립 조회 오류: ${res.status}`);
   }
-  const data = await res.json();
-  return data.length > 0 ? data[0] : null;
+  return res.json();   // null 또는 clip 객체
 }
 
 // ── 네이버 뉴스 API 호출 (server.js 프록시 경유) ────────
@@ -390,20 +400,69 @@ async function fetchAllNaverNews() {
   return results.slice(0, 40);
 }
 
-// ── Claude: 수집된 기사 기반 브리핑 생성 ─────────────
-async function callClaudeWithArticles(articles) {
+// ── Claude(Haiku): 브리핑만 빠르게 생성 ──────────────────
+//   - 헤드라인만 입력 → 토큰 절약
+//   - max_tokens 1024 → 출력 짧음 (브리핑 길이는 200-400자 유지)
+//   - Haiku 모델 → Sonnet 대비 응답 속도 약 3~5배 빠름
+async function generateBriefing(articles) {
   const today   = new Date();
   const dateStr = today.toLocaleDateString('ko-KR', { year:'numeric', month:'long', day:'numeric', weekday:'long' });
 
-  // 설명을 80자로 잘라 토큰 절약
+  // 헤드라인 + 출처만 전달 (입력 토큰 최소화)
+  const headlinesText = articles.slice(0, 30).map((a, i) =>
+    `[${i + 1}] ${a.title} (${a.source})`
+  ).join('\n');
+
+  const systemPrompt =
+`당신은 HD현대오일뱅크 영업사원을 보조하는 유류산업 뉴스 브리핑 AI입니다.
+주어진 뉴스 헤드라인을 종합 분석해 한국어로 200-400자 분량의 일일 브리핑을 작성하세요.
+- 핵심 수치(유가, 환율, 가격 등)는 <strong>으로 강조
+- 자연스러운 단락 흐름 유지
+- JSON·코드블록·따옴표 묶음 없이 순수 브리핑 본문만 출력`;
+
+  const userPrompt = `${dateStr} 유류산업 뉴스 헤드라인:\n\n${headlinesText}\n\n위 뉴스를 종합한 200-400자 분량의 일일 브리핑을 작성해주세요.`;
+
+  const response = await fetch('/api/claude/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model:      CONFIG.briefingModel,
+      max_tokens: 1024,
+      system:     systemPrompt,
+      messages:   [{ role: 'user', content: userPrompt }],
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error?.message || `브리핑 API 오류: ${response.status}`);
+  }
+
+  const data     = await response.json();
+  const fullText = data.content.filter(b => b.type === 'text').map(b => b.text).join('').trim();
+
+  // 혹시 모를 따옴표/코드블록 잔재 제거
+  return fullText
+    .replace(/^```[a-z]*\n?/i, '')
+    .replace(/```$/i, '')
+    .replace(/^["']+|["']+$/g, '')
+    .trim();
+}
+
+// ── Claude(Sonnet): 뉴스 큐레이션만 정확하게 생성 ─────────
+async function curateNewsWithClaude(articles) {
+  const today   = new Date();
+  const dateStr = today.toLocaleDateString('ko-KR', { year:'numeric', month:'long', day:'numeric', weekday:'long' });
+
+  // 큐레이션은 URL 매칭이 필요하므로 description은 짧게라도 유지
   const articleText = articles.map((a, i) =>
-    `[${i + 1}] ${a.title}\n출처:${a.source} 날짜:${a.date}\nURL:${a.url}\n내용:${a.description.slice(0, 80)}`
+    `[${i + 1}] ${a.title}\n출처:${a.source} 날짜:${a.date}\nURL:${a.url}`
   ).join('\n---\n');
 
   const systemPrompt =
-`HD현대오일뱅크 유류산업 뉴스 클리핑 AI. 순수 JSON만 반환 (코드블록 금지).
+`HD현대오일뱅크 유류산업 뉴스 큐레이션 AI. 순수 JSON만 반환 (코드블록 금지).
 형식:
-{"news":[{"id":1,"title":"제목","url":"URL","source":"언론사","date":"YYYY-MM-DD HH:mm","tag":"price|company|station|policy|mobility|general","summary":"요약(30자)"}],"briefing":"종합브리핑(200-400자,HTML허용:<strong><br>)"}
+{"news":[{"id":1,"title":"제목","url":"URL","source":"언론사","date":"YYYY-MM-DD HH:mm","tag":"price|company|station|policy|mobility|general"}]}
 태그: price=유가/환율, company=정유사, station=주유소, policy=유류세/정책, mobility=전기차/수소. 중복제거, 최대30개.`;
 
   const userPrompt = `${dateStr} 유류산업 뉴스:\n\n${articleText}\n\n최대30개 선별 후 JSON만 응답.`;
@@ -413,7 +472,7 @@ async function callClaudeWithArticles(articles) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model:      CONFIG.model,
-      max_tokens: 8192,
+      max_tokens: 4096,
       system:     systemPrompt,
       messages:   [{ role: 'user', content: userPrompt }],
     }),
@@ -421,7 +480,7 @@ async function callClaudeWithArticles(articles) {
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    throw new Error(err.error?.message || `Claude API 오류: ${response.status}`);
+    throw new Error(err.error?.message || `큐레이션 API 오류: ${response.status}`);
   }
 
   const data     = await response.json();
@@ -429,13 +488,13 @@ async function callClaudeWithArticles(articles) {
   const parsed   = parseClaudeJson(fullText, articles);
 
   const urlMap = Object.fromEntries(articles.map(a => [a.title.slice(0, 20), a]));
-  parsed.news = parsed.news.map(item => ({
+  const news = parsed.news.map(item => ({
     ...item,
     url: item.url || urlMap[item.title?.slice(0, 20)]?.url || '#',
     tag: item.tag || classifyTag(item.title),
   }));
 
-  return { news: parsed.news.slice(0, CONFIG.maxNews), briefing: parsed.briefing || '' };
+  return news.slice(0, CONFIG.maxNews);
 }
 
 // ── JSON 파서 (잘린 응답 복구 포함) ───────────────────
