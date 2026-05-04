@@ -14,7 +14,7 @@ const CONFIG = {
 
   naver: {
     endpoint: '/api/naver/news',
-    display:  5,
+    display:  10,
   },
 
   clips: {
@@ -418,7 +418,7 @@ async function fetchAllNaverNews() {
   });
 
   results.sort((a, b) => (b.date > a.date ? 1 : -1));
-  return results.slice(0, 40);
+  return results.slice(0, 80);
 }
 
 // ── Claude(Haiku): 브리핑만 빠르게 생성 ──────────────────
@@ -484,9 +484,10 @@ async function curateNewsWithClaude(articles) {
 `HD현대오일뱅크 유류산업 뉴스 큐레이션 AI. 순수 JSON만 반환 (코드블록 금지).
 형식:
 {"news":[{"id":1,"title":"제목","url":"URL","source":"언론사","date":"YYYY-MM-DD HH:mm","tag":"price|company|station|policy|mobility|general"}]}
-태그: price=유가/환율, company=정유사, station=주유소, policy=유류세/정책, mobility=전기차/수소. 중복제거, 최대30개.`;
+태그: price=유가/환율, company=정유사, station=주유소, policy=유류세/정책, mobility=전기차/수소.
+중복제거 후 반드시 정확히 30개를 선별해 반환. 30개 미만이면 general 태그로라도 채워서 30개를 맞출 것.`;
 
-  const userPrompt = `${dateStr} 유류산업 뉴스:\n\n${articleText}\n\n최대30개 선별 후 JSON만 응답.`;
+  const userPrompt = `${dateStr} 유류산업 뉴스:\n\n${articleText}\n\n정확히 30개 선별 후 JSON만 응답.`;
 
   const response = await fetch('/api/claude/messages', {
     method: 'POST',
